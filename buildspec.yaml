@@ -8,50 +8,115 @@ env:
     IMAGE_REPO_NAME: three-tier
     CONTAINER_NAME: todo-container
     TASK_DEFINITION_FAMILY: todo-task
-    SUBNETS: "subnet-083add9d53a052016"
+    LOAD_BALANCER_NAME: todo-alb
+    TARGET_GROUP_NAME: todo-target-group
+    VPC_ID: vpc-0c6f6b98b166bd404                     # 🔁 Update with your real VPC ID
+    SUBNETS: "subnet-083add9d53a052016,subnet-06e08945044b325a5" # Must be 2+ public subnets
     SECURITY_GROUP: "sg-0c9e4f3c7a6be673e"
 
 phases:
   install:
     commands:
-      - echo "🔧 Checking for jq..."
+      - echo "🔧 Starting setup..."
       - jq --version || echo "jq is pre-installed"
 
   pre_build:
     commands:
-      - echo "🔐 Logging into ECR..."
+      - echo "🔐 Logging in to ECR..."
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
       - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
       - IMAGE_URI=$REPOSITORY_URI:$IMAGE_TAG
+
+      - echo "🔍 Checking for ECR repo..."
       - |
         if ! aws ecr describe-repositories --repository-names $IMAGE_REPO_NAME >/dev/null 2>&1; then
-          echo "➡️  Creating ECR repo: $IMAGE_REPO_NAME"
+          echo "📦 Creating ECR repo: $IMAGE_REPO_NAME"
           aws ecr create-repository --repository-name $IMAGE_REPO_NAME
         fi
       - aws ecr get-login-password | docker login --username AWS --password-stdin $REPOSITORY_URI
 
+      - echo "🌐 Checking if Target Group exists..."
+      - |
+        TG_ARN=$(aws elbv2 describe-target-groups \
+          --names $TARGET_GROUP_NAME \
+          --query 'TargetGroups[0].TargetGroupArn' \
+          --output text 2>/dev/null || echo "MISSING")
+
+      - |
+        if [ "$TG_ARN" = "MISSING" ]; then
+          echo "🎯 Creating new Target Group..."
+          TG_ARN=$(aws elbv2 create-target-group \
+            --name $TARGET_GROUP_NAME \
+            --protocol HTTP \
+            --port 80 \
+            --vpc-id $VPC_ID \
+            --target-type ip \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+        fi
+
+      - echo "🧠 Target Group ARN: $TG_ARN"
+      - export TARGET_GROUP_ARN=$TG_ARN
+
+      - echo "🕸 Checking if Load Balancer exists..."
+      - |
+        LB_ARN=$(aws elbv2 describe-load-balancers \
+          --names $LOAD_BALANCER_NAME \
+          --query 'LoadBalancers[0].LoadBalancerArn' \
+          --output text 2>/dev/null || echo "MISSING")
+
+      - |
+        if [ "$LB_ARN" = "MISSING" ]; then
+          echo "🆕 Creating Load Balancer..."
+          LB_ARN=$(aws elbv2 create-load-balancer \
+            --name $LOAD_BALANCER_NAME \
+            --subnets $(echo $SUBNETS | tr "," " ") \
+            --security-groups $SECURITY_GROUP \
+            --scheme internet-facing \
+            --type application \
+            --ip-address-type ipv4 \
+            --query 'LoadBalancers[0].LoadBalancerArn' \
+            --output text)
+          
+          echo "⏳ Waiting for LB to become active..."
+          aws elbv2 wait load-balancer-available --load-balancer-arns $LB_ARN
+
+          echo "🔁 Creating listener on port 80..."
+          aws elbv2 create-listener \
+            --load-balancer-arn $LB_ARN \
+            --protocol HTTP \
+            --port 80 \
+            --default-actions Type=forward,TargetGroupArn=$TG_ARN
+        fi
+
+      - export LOAD_BALANCER_ARN=$LB_ARN
+
   build:
     commands:
-      - echo "🐳 Building Docker image..."
+      - echo "🐳 Building and pushing Docker image..."
       - docker build -t $IMAGE_URI .
-      - echo "🚀 Pushing image to ECR..."
       - docker push $IMAGE_URI
 
   post_build:
     commands:
-      - echo "📄 Creating ECS task definition..."
+      - echo "📄 Creating task definition..."
       - sed "s|<IMAGE_URI>|$IMAGE_URI|g" taskdef.json > new-taskdef.json
-      - cat new-taskdef.json
-      - jq . new-taskdef.json || { echo "❌ Invalid JSON"; exit 1; }
-      - echo "📦 Registering task definition..."
-      - TASK_REVISION=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json --query 'taskDefinition.revision' --output text)
+      - jq . new-taskdef.json || { echo "❌ Invalid taskdef"; exit 1; }
+
+      - echo "📦 Registering task def..."
+      - TASK_REVISION=$(aws ecs register-task-definition \
+          --cli-input-json file://new-taskdef.json \
+          --query 'taskDefinition.revision' --output text)
+
+      - echo "🔍 Checking if ECS service exists..."
       - |
         SERVICE_STATUS=$(aws ecs describe-services \
           --cluster $CLUSTER_NAME \
           --services $SERVICE_NAME \
           --query "services[0].status" \
           --output text 2>/dev/null || echo "MISSING")
+
       - |
         if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
           echo "🌀 Updating ECS service..."
@@ -61,14 +126,15 @@ phases:
             --task-definition $TASK_DEFINITION_FAMILY:$TASK_REVISION \
             --force-new-deployment
         else
-          echo "🆕 Creating ECS service..."
+          echo "🆕 Creating ECS service with ALB..."
           aws ecs create-service \
             --cluster $CLUSTER_NAME \
             --service-name $SERVICE_NAME \
             --task-definition $TASK_DEFINITION_FAMILY:$TASK_REVISION \
             --desired-count 1 \
             --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}"
+            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+            --load-balancers "targetGroupArn=$TARGET_GROUP_ARN,containerName=$CONTAINER_NAME,containerPort=80"
         fi
 
 artifacts:
