@@ -14,8 +14,9 @@ env:
 phases:
   install:
     commands:
-      - echo Installing dependencies...
-      - apt-get update && apt-get install -y jq
+      - echo Checking for jq...
+      - jq --version || echo "jq not found – but will try using built-in one anyway"
+
 
   pre_build:
     commands:
