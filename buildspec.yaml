@@ -14,8 +14,8 @@ env:
 phases:
   install:
     commands:
-      - echo "🔧 Installing dependencies..."
-      - jq --version || echo "jq already included in image."
+      - echo "🔧 Checking for jq..."
+      - jq --version || echo "Warning: jq not found — but likely pre-installed"
 
   pre_build:
     commands:
@@ -46,14 +46,12 @@ phases:
     commands:
       - echo "📄 Preparing ECS task definition..."
       - sed "s|<IMAGE_URI>|$IMAGE_URI|g" taskdef.json > new-taskdef.json
-      - echo "--- new-taskdef.json ---"
+      - echo "--- Rendered Task Definition ---"
       - cat new-taskdef.json
-      - jq . new-taskdef.json || { echo "❌ JSON invalid"; exit 1; }
+      - jq . new-taskdef.json || { echo "❌ Invalid JSON"; exit 1; }
 
-      - echo "📦 Registering new ECS task definition..."
-      - TASK_REVISION=$(aws ecs register-task-definition \
-            --cli-input-json file://new-taskdef.json \
-            --query 'taskDefinition.revision' --output text)
+      - echo "📦 Registering task definition..."
+      - TASK_REVISION=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json --query 'taskDefinition.revision' --output text)
 
       - echo "🔍 Checking if ECS service exists..."
       - |
@@ -65,7 +63,7 @@ phases:
 
       - |
         if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
-          echo "🌀 Updating ECS service with new task def..."
+          echo "🌀 Updating ECS service with new task def revision..."
           aws ecs update-service \
             --cluster $CLUSTER_NAME \
             --service $SERVICE_NAME \
