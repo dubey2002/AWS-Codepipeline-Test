@@ -2,19 +2,17 @@ version: 0.2
 
 env:
   variables:
-    AWS_DEFAULT_REGION: ap-south-2
+    AWS_DEFAULT_REGION: ap-south-2                 # ✅ Correct region
     CLUSTER_NAME: codepipeline-test
     SERVICE_NAME: todo-service
     IMAGE_REPO_NAME: three-tier
     CONTAINER_NAME: todo-container
     TASK_DEFINITION_FAMILY: todo-task
-    SUBNETS: "subnet-083add9d53a052016"        # 🔁 Update with real subnet IDs
-    SECURITY_GROUP: "sg-0c9e4f3c7a6be673e"        # 🔐 Update with real SG ID that allows port 80
+    SUBNETS: "subnet-083add9d53a052016"             # ✅ Replace with real public subnet(s)
+    SECURITY_GROUP: "sg-0c9e4f3c7a6be673e"           # ✅ Should allow inbound on port 80
 
 phases:
   install:
-    runtime-versions:
-      docker: 20
     commands:
       - echo Installing dependencies...
       - apt-get update && apt-get install -y jq
