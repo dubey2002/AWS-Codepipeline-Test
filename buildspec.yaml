@@ -108,39 +108,39 @@ phases:
 
       - echo "📦 Registering ECS task definition..."
       - |
-        TASK_REVISION=$(aws ecs register-task-definition \
-          --cli-input-json file://new-taskdef.json \
-          --query 'taskDefinition.revision' \
-          --output text)
-        echo "🆕 Registered task revision: $TASK_REVISION"
+          TASK_REVISION=$(aws ecs register-task-definition \
+            --cli-input-json file://new-taskdef.json \
+            --query 'taskDefinition.revision' \
+            --output text)
+          echo "🆕 Registered task revision: $TASK_REVISION"
 
       - echo "🔍 Checking if ECS service exists..."
       - |
-        SERVICE_STATUS=$(aws ecs describe-services \
-          --cluster $CLUSTER_NAME \
-          --services $SERVICE_NAME \
-          --query "services[0].status" \
-          --output text 2>/dev/null || echo "MISSING")
+          SERVICE_STATUS=$(aws ecs describe-services \
+            --cluster $CLUSTER_NAME \
+            --services $SERVICE_NAME \
+            --query "services[0].status" \
+            --output text 2>/dev/null || echo "MISSING")
 
       - |
-        if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
-          echo "🌀 Updating ECS service..."
-          aws ecs update-service \
-            --cluster $CLUSTER_NAME \
-            --service $SERVICE_NAME \
-            --task-definition $TASK_DEFINITION_FAMILY:$TASK_REVISION \
-            --force-new-deployment
-        else
-          echo "🚀 Creating ECS service with ALB..."
-          aws ecs create-service \
-            --cluster $CLUSTER_NAME \
-            --service-name $SERVICE_NAME \
-            --task-definition $TASK_DEFINITION_FAMILY:$TASK_REVISION \
-            --desired-count 1 \
-            --launch-type FARGATE \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
-            --load-balancers "targetGroupArn=$TARGET_GROUP_ARN,containerName=$CONTAINER_NAME,containerPort=80"
-        fi
+          if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
+            echo "🌀 Updating ECS service..."
+            aws ecs update-service \
+              --cluster $CLUSTER_NAME \
+              --service $SERVICE_NAME \
+              --task-definition $TASK_DEFINITION_FAMILY:$TASK_REVISION \
+              --force-new-deployment
+          else
+            echo "🚀 Creating ECS service with ALB..."
+            aws ecs create-service \
+              --cluster $CLUSTER_NAME \
+              --service-name $SERVICE_NAME \
+              --task-definition $TASK_DEFINITION_FAMILY:$TASK_REVISION \
+              --desired-count 1 \
+              --launch-type FARGATE \
+              --network-configuration "awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
+              --load-balancers "targetGroupArn=$TARGET_GROUP_ARN,containerName=$CONTAINER_NAME,containerPort=80"
+          fi
 
 artifacts:
   files:
