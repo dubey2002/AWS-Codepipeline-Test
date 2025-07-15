@@ -2,7 +2,7 @@ version: 0.2
 
 env:
   variables:
-    AWS_DEFAULT_REGION: ap-south-1
+    AWS_DEFAULT_REGION: ap-south-2
     CLUSTER_NAME: codepipeline-test
     SERVICE_NAME: todo-service
     IMAGE_REPO_NAME: three-tier
