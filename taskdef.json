@@ -16,7 +16,7 @@
     }
   ],
   "requiresCompatibilities": [
-    "FARGATE"
+    "EC2"
   ],
   "cpu": "256",
   "memory": "512"
