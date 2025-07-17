@@ -27,7 +27,19 @@ phases:
       - |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           REPOSITORY_URI=$ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
-          IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+
+          echo "🔢 Calculating next image tag..."
+          EXISTING_TAGS=$(aws ecr list-images --repository-name $IMAGE_REPO_NAME \
+              --query 'imageIds[].tag' --output text | tr '\t' '\n' | grep -E '^[0-9]+$' | sort -n)
+
+          if [ -z "$EXISTING_TAGS" ]; then
+            NEXT_TAG=1
+          else
+            MAX_TAG=$(echo "$EXISTING_TAGS" | tail -n 1)
+            NEXT_TAG=$((MAX_TAG + 1))
+          fi
+
+          IMAGE_TAG=$NEXT_TAG
           IMAGE_URI=$REPOSITORY_URI:$IMAGE_TAG
           export REPOSITORY_URI IMAGE_TAG IMAGE_URI
 
@@ -91,7 +103,7 @@ phases:
 
   build:
     commands:
-      - echo "🐳 Building Docker image..."
+      - echo "🐳 Building Docker image with tag $IMAGE_TAG..."
       - docker build -t $IMAGE_URI .
       - echo "📤 Pushing image to ECR..."
       - docker push $IMAGE_URI
@@ -108,6 +120,17 @@ phases:
             --cli-input-json file://new-taskdef.json \
             --query 'taskDefinition.revision' --output text)
           echo "🆕 Task definition revision: $TASK_REVISION"
+
+      - echo "🧹 Cleaning up old task definitions..."
+      - |
+          OLD_REVISIONS=$(aws ecs list-task-definitions \
+            --family-prefix $TASK_DEFINITION_FAMILY \
+            --sort DESC \
+            --query "taskDefinitionArns[5:]" --output text)
+          for arn in $OLD_REVISIONS; do
+            echo "🗑️ Deregistering: $arn"
+            aws ecs deregister-task-definition --task-definition $arn
+          done
 
       - echo "🔍 Checking if ECS service exists..."
       - |
