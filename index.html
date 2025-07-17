@@ -9,17 +9,9 @@
   <div class="todo-container">
     <h1>Anurag's To-Do List 📝</h1>
     <input type="text" id="todo-input" placeholder="Enter a new task...">
-    <!-- JavaScript function call is broken here: unclosed parenthesis -->
-    <button onclick="addTodo(">Add</button>
+    <button onclick="addTodo()">Add</button>
     <ul id="todo-list"></ul>
   </div>
-
-  <!-- Intentionally calling undefined script file -->
-  <script src="nonexistent.js"></script>
-
-  <!-- Optional: throw an error directly -->
-  <script>
-    throw new Error("Intentional crash: app logic failed!");
-  </script>
+  <script src="script.js"></script>
 </body>
-</html>
+</html>modify this html in way that app will be crashed but container will be still running.
