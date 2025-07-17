@@ -13,7 +13,7 @@ env:
     VPC_ID: vpc-0c6f6b98b166bd404
     SUBNETS: "subnet-083add9d53a052016,subnet-06e08945044b325a5"
     SECURITY_GROUP: "sg-0c9e4f3c7a6be673e"
-    CAPACITY_PROVIDER: ASG         # ← your EC2 capacity provider
+    CAPACITY_PROVIDER: test         # ← your EC2 capacity provider
 
 phases:
   install:
