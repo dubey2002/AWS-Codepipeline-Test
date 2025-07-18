@@ -1,15 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>ToDo App (502 Test)</title>
-</head>
+<html>
+<head><title>Oops</title></head>
 <body>
-  <h1>Anurag's To-Do List 📝</h1>
-  <input type="text" id="todo-input" placeholder="Enter a new task...">
-  <button onclick="addTodo()">Add</button>
-  <ul id="todo-list"></ul>
-
-  <script src="script.js"></script>
+<!-- Boom: calling undefined JS function on load -->
+<script>
+  nonExistentFunction(); // 💥 Kaboom
+</script>
 </body>
 </html>
